@@ -7,7 +7,7 @@ from arxiv_reader.web import _list_runs, _load_run, _save_screen_run, _search_wi
 def test_search_with_lookback_uses_recent_non_empty_day(monkeypatch):
     calls = []
 
-    def fake_search(query, *, max_results, sort_by):
+    def fake_search(query, *, max_results, sort_by, progress=None):
         calls.append(query)
         return SimpleNamespace(papers=["paper"], total_results=1) if "20260505" in query else SimpleNamespace(papers=[], total_results=0)
 

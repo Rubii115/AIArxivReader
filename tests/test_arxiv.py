@@ -26,7 +26,7 @@ def test_get_paper_from_abs_page_parses_arxiv_html(monkeypatch):
     <blockquote class="abstract mathjax"><span class="descriptor">Abstract:</span>A useful abstract.</blockquote>
     <td class="tablecell subjects"><span class="primary-subject">Quantum Physics (quant-ph)</span></td>
     """
-    monkeypatch.setattr(arxiv, "_http_get", lambda url: html)
+    monkeypatch.setattr(arxiv, "_http_get", lambda url, **kwargs: html)
     paper = get_paper_from_abs_page("2605.04049")
     assert paper.title == "Demo Paper"
     assert paper.authors == ("Ada Lovelace", "Alan Turing")
@@ -47,6 +47,7 @@ def test_parse_total_results_reads_opensearch_count():
 def test_http_get_retries_429_with_retry_after(monkeypatch):
     calls = []
     sleeps = []
+    events = []
     headers = Message()
     headers["Retry-After"] = "1"
 
@@ -71,13 +72,16 @@ def test_http_get_retries_429_with_retry_after(monkeypatch):
     monkeypatch.setattr(arxiv.urllib.request, "urlopen", fake_urlopen)
     monkeypatch.setattr(arxiv.time, "sleep", lambda seconds: sleeps.append(seconds))
 
-    assert arxiv._http_get("https://export.arxiv.org/api/query?q=test") == b"ok"
+    assert arxiv._http_get("https://export.arxiv.org/api/query?q=test", progress=events.append) == b"ok"
     assert len(calls) == 2
     assert sleeps == [1.0]
+    assert events[0]["type"] == "wait"
+    assert events[0]["reason"] == "http_429"
 
 
 def test_http_get_rate_limits_arxiv_api_requests(monkeypatch):
     sleeps = []
+    events = []
     timestamps = iter([10.0, 10.0, 10.5, 13.6])
 
     class Response:
@@ -97,9 +101,10 @@ def test_http_get_rate_limits_arxiv_api_requests(monkeypatch):
     monkeypatch.setattr(arxiv.time, "sleep", lambda seconds: sleeps.append(round(seconds, 1)))
     monkeypatch.setattr(arxiv, "_LAST_ARXIV_API_REQUEST_AT", 0.0)
 
-    assert arxiv._http_get(arxiv.ARXIV_API + "?q=one") == b"ok"
-    assert arxiv._http_get(arxiv.ARXIV_API + "?q=two") == b"ok"
+    assert arxiv._http_get(arxiv.ARXIV_API + "?q=one", progress=events.append) == b"ok"
+    assert arxiv._http_get(arxiv.ARXIV_API + "?q=two", progress=events.append) == b"ok"
     assert sleeps == [2.6]
+    assert events[0]["reason"] == "polite_rate_limit"
 
 
 def test_request_headers_use_configurable_user_agent(monkeypatch):

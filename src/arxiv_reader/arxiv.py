@@ -71,11 +71,11 @@ def build_interest_query(categories: tuple[str, ...], keywords: tuple[str, ...],
     return " AND ".join(parts)
 
 
-def search(query: str, *, max_results: int = 10, sort_by: str = "relevance") -> list[Paper]:
-    return search_with_total(query, max_results=max_results, sort_by=sort_by).papers
+def search(query: str, *, max_results: int = 10, sort_by: str = "relevance", progress=None) -> list[Paper]:
+    return search_with_total(query, max_results=max_results, sort_by=sort_by, progress=progress).papers
 
 
-def search_with_total(query: str, *, max_results: int = 10, sort_by: str = "relevance", start: int = 0) -> SearchResult:
+def search_with_total(query: str, *, max_results: int = 10, sort_by: str = "relevance", start: int = 0, progress=None) -> SearchResult:
     params = {
         "search_query": query,
         "start": str(start),
@@ -84,25 +84,25 @@ def search_with_total(query: str, *, max_results: int = 10, sort_by: str = "rele
         "sortOrder": "descending",
     }
     url = ARXIV_API + "?" + urllib.parse.urlencode(params)
-    xml_bytes = _http_get(url)
+    xml_bytes = _http_get(url, progress=progress)
     return SearchResult(parse_atom(xml_bytes), parse_total_results(xml_bytes))
 
 
-def get_paper(paper_id: str) -> Paper:
+def get_paper(paper_id: str, *, progress=None) -> Paper:
     normalized = normalize_arxiv_id(paper_id)
     try:
-        results = search(f"id:{normalized}", max_results=1)
+        results = search(f"id:{normalized}", max_results=1, progress=progress)
     except RuntimeError:
-        return get_paper_from_abs_page(normalized)
+        return get_paper_from_abs_page(normalized, progress=progress)
     if not results:
-        return get_paper_from_abs_page(normalized)
+        return get_paper_from_abs_page(normalized, progress=progress)
     return results[0]
 
 
-def get_paper_from_abs_page(paper_id: str) -> Paper:
+def get_paper_from_abs_page(paper_id: str, *, progress=None) -> Paper:
     normalized = normalize_arxiv_id(paper_id)
     url = f"https://arxiv.org/abs/{urllib.parse.quote(normalized)}"
-    html = _http_get(url).decode("utf-8", errors="ignore")
+    html = _http_get(url, progress=progress).decode("utf-8", errors="ignore")
     title = _html_text(_match_html(html, r'<h1 class="title mathjax">\s*<span class="descriptor">Title:</span>(.*?)</h1>'))
     summary = _html_text(
         _match_html(html, r'<blockquote class="abstract mathjax">\s*<span class="descriptor">Abstract:</span>(.*?)</blockquote>')
@@ -132,9 +132,9 @@ def get_paper_from_abs_page(paper_id: str) -> Paper:
     )
 
 
-def download_source(paper_id: str, destination: str | Path | None = None) -> Path:
+def download_source(paper_id: str, destination: str | Path | None = None, *, progress=None) -> Path:
     normalized = normalize_arxiv_id(paper_id)
-    raw = _http_get(ARXIV_EPRINT.format(paper_id=urllib.parse.quote(normalized)))
+    raw = _http_get(ARXIV_EPRINT.format(paper_id=urllib.parse.quote(normalized)), progress=progress)
     target = Path(destination) if destination else Path(tempfile.mkdtemp(prefix="arxiv-reader-")) / normalized.replace("/", "_")
     target.mkdir(parents=True, exist_ok=True)
 
@@ -196,8 +196,8 @@ def parse_total_results(xml_bytes: bytes) -> int:
         return 0
 
 
-def _http_get(url: str) -> bytes:
-    _respect_arxiv_api_rate_limit(url)
+def _http_get(url: str, *, progress=None) -> bytes:
+    _respect_arxiv_api_rate_limit(url, progress=progress)
     request = urllib.request.Request(url, headers=_request_headers())
     last_error: Exception | None = None
     for attempt in range(MAX_HTTP_ATTEMPTS):
@@ -207,13 +207,17 @@ def _http_get(url: str) -> bytes:
         except urllib.error.HTTPError as exc:
             last_error = exc
             if exc.code in RETRYABLE_HTTP_STATUS and attempt < MAX_HTTP_ATTEMPTS - 1:
-                time.sleep(_retry_delay(exc, attempt))
+                delay = _retry_delay(exc, attempt)
+                _emit_wait(progress, _retry_message(exc, delay, attempt), delay=delay, attempt=attempt + 1, url=url, reason=f"http_{exc.code}")
+                time.sleep(delay)
                 continue
             raise RuntimeError(_http_error_message(exc, url)) from exc
         except urllib.error.URLError as exc:
             last_error = exc
             if attempt < MAX_HTTP_ATTEMPTS - 1:
-                time.sleep(0.8 * (attempt + 1))
+                delay = 0.8 * (attempt + 1)
+                _emit_wait(progress, f"Network error while contacting arXiv; waiting {delay:.1f}s before retry.", delay=delay, attempt=attempt + 1, url=url, reason="network")
+                time.sleep(delay)
                 continue
             break
     assert last_error is not None
@@ -262,7 +266,7 @@ def _http_error_message(exc: urllib.error.HTTPError, url: str) -> str:
     return f"HTTP {exc.code} while requesting {url}"
 
 
-def _respect_arxiv_api_rate_limit(url: str) -> None:
+def _respect_arxiv_api_rate_limit(url: str, *, progress=None) -> None:
     if not url.startswith(ARXIV_API):
         return
     global _LAST_ARXIV_API_REQUEST_AT
@@ -270,8 +274,27 @@ def _respect_arxiv_api_rate_limit(url: str) -> None:
         now = time.monotonic()
         wait_for = ARXIV_API_MIN_INTERVAL_SECONDS - (now - _LAST_ARXIV_API_REQUEST_AT)
         if wait_for > 0:
+            _emit_wait(
+                progress,
+                f"Waiting {wait_for:.1f}s before the next arXiv API request to avoid rate limiting.",
+                delay=wait_for,
+                attempt=0,
+                url=url,
+                reason="polite_rate_limit",
+            )
             time.sleep(wait_for)
         _LAST_ARXIV_API_REQUEST_AT = time.monotonic()
+
+
+def _retry_message(exc: urllib.error.HTTPError, delay: float, attempt: int) -> str:
+    if exc.code == 429:
+        return f"arXiv is rate-limiting requests. Waiting {delay:.1f}s before retry {attempt + 2}/{MAX_HTTP_ATTEMPTS}."
+    return f"arXiv returned HTTP {exc.code}. Waiting {delay:.1f}s before retry {attempt + 2}/{MAX_HTTP_ATTEMPTS}."
+
+
+def _emit_wait(progress, message: str, **extra) -> None:
+    if progress:
+        progress({"type": "wait", "message": message, **extra})
 
 
 def _text(node: ET.Element, path: str, ns: dict[str, str]) -> str:

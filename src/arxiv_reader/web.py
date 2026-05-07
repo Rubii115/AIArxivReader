@@ -371,10 +371,10 @@ def _deep_read(paper_id: str, state: AppState, interest: str, progress, stream_s
             progress({"type": "progress", "message": text, **extra})
 
     emit(f"Fetching paper metadata: {paper_id}")
-    paper = get_paper(paper_id)
+    paper = get_paper(paper_id, progress=progress)
     emit(f"Fetched title: {paper.title}", title=paper.title, arxiv_id=paper.arxiv_id)
     emit("Downloading arXiv TeX source.")
-    source_dir = download_source(paper.arxiv_id)
+    source_dir = download_source(paper.arxiv_id, progress=progress)
     emit("Source download complete. Parsing TeX files.")
     source_text = collect_source_text(source_dir, max_chars=state.config.reading.max_source_chars)
     emit(f"TeX parsing complete. Sending source excerpt to the model: {len(source_text)} characters.")
@@ -406,7 +406,7 @@ def _search_with_lookback(
         query = build_interest_query(categories, (), current)
         if progress:
             progress({"type": "progress", "message": f"Requesting arXiv: {current.isoformat()}, up to {candidate_count} papers.", "query": query})
-        search_result = search_with_total(query, max_results=candidate_count, sort_by="submittedDate")
+        search_result = search_with_total(query, max_results=candidate_count, sort_by="submittedDate", progress=progress)
         papers = search_result.papers
         if progress:
             titles = [paper.title for paper in papers[:8]]
