@@ -1,4 +1,6 @@
 from datetime import date
+from email.message import Message
+import urllib.error
 
 from arxiv_reader import arxiv
 from arxiv_reader.arxiv import build_interest_query, get_paper_from_abs_page, normalize_arxiv_id
@@ -30,3 +32,33 @@ def test_get_paper_from_abs_page_parses_arxiv_html(monkeypatch):
     assert paper.authors == ("Ada Lovelace", "Alan Turing")
     assert paper.summary == "A useful abstract."
     assert paper.categories == ("quant-ph",)
+
+
+def test_http_get_retries_429_with_retry_after(monkeypatch):
+    calls = []
+    sleeps = []
+    headers = Message()
+    headers["Retry-After"] = "1"
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"ok"
+
+    def fake_urlopen(request, timeout):
+        calls.append(request)
+        if len(calls) == 1:
+            raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", headers, None)
+        return Response()
+
+    monkeypatch.setattr(arxiv.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(arxiv.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    assert arxiv._http_get("https://export.arxiv.org/api/query?q=test") == b"ok"
+    assert len(calls) == 2
+    assert sleeps == [1.0]

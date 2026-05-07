@@ -21,6 +21,8 @@ import xml.etree.ElementTree as ET
 ARXIV_API = "https://export.arxiv.org/api/query"
 ARXIV_EPRINT = "https://arxiv.org/e-print/{paper_id}"
 USER_AGENT = "arxiv-reader/0.1 (mailto:local@example.invalid)"
+RETRYABLE_HTTP_STATUS = {429, 503}
+MAX_HTTP_ATTEMPTS = 5
 
 
 @dataclass(frozen=True)
@@ -173,19 +175,48 @@ def parse_atom(xml_bytes: bytes) -> list[Paper]:
 def _http_get(url: str) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     last_error: Exception | None = None
-    for attempt in range(3):
+    for attempt in range(MAX_HTTP_ATTEMPTS):
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 return response.read()
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"HTTP {exc.code} while requesting {url}") from exc
+            last_error = exc
+            if exc.code in RETRYABLE_HTTP_STATUS and attempt < MAX_HTTP_ATTEMPTS - 1:
+                time.sleep(_retry_delay(exc, attempt))
+                continue
+            raise RuntimeError(_http_error_message(exc, url)) from exc
         except urllib.error.URLError as exc:
             last_error = exc
-            if attempt < 2:
+            if attempt < MAX_HTTP_ATTEMPTS - 1:
                 time.sleep(0.8 * (attempt + 1))
+                continue
+            break
     assert last_error is not None
     reason = getattr(last_error, "reason", last_error)
     raise RuntimeError(f"Network error while requesting {url}: {reason}") from last_error
+
+
+def _retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float:
+    retry_after = exc.headers.get("Retry-After") if exc.headers else None
+    if retry_after:
+        try:
+            return max(1.0, float(retry_after))
+        except ValueError:
+            try:
+                retry_at = parsedate_to_datetime(retry_after)
+                return max(1.0, retry_at.timestamp() - time.time())
+            except (TypeError, ValueError):
+                pass
+    return min(60.0, 5.0 * (2**attempt))
+
+
+def _http_error_message(exc: urllib.error.HTTPError, url: str) -> str:
+    if exc.code == 429:
+        return (
+            f"HTTP 429 while requesting {url}. arXiv is rate-limiting requests; "
+            "wait a few minutes, reduce the candidate count, or retry later."
+        )
+    return f"HTTP {exc.code} while requesting {url}"
 
 
 def _text(node: ET.Element, path: str, ns: dict[str, str]) -> str:
