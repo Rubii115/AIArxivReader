@@ -214,7 +214,10 @@ TeX source excerpt:
 {source_excerpt}
 """.strip(),
         },
-        {"role": "assistant", "content": "我已载入这篇论文的元数据、深读摘要和源码节选，可以继续追问。"},
+        {
+            "role": "assistant",
+            "content": "I have loaded this paper's metadata, deep-read summary, and source excerpt. You can ask follow-up questions.",
+        },
     ]
     messages.extend(history[-8:])
     messages.append({"role": "user", "content": question})

@@ -8,11 +8,13 @@ import sys
 from .ai import summarize_paper
 from .arxiv import build_interest_query, download_source, get_paper, search
 from .config import load_config
+from .env import load_dotenv
 from .publication import publication_query
 from .tex import collect_source_text
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_dotenv()
     parser = argparse.ArgumentParser(prog="arxiv-reader")
     parser.add_argument("--config", default="config.toml", help="Path to TOML config. Defaults to config.toml.")
     subparsers = parser.add_subparsers(dest="command", required=True)

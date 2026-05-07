@@ -15,6 +15,7 @@ from uuid import uuid4
 from .ai import SummaryResult, answer_question, stream_answer_chunks, stream_summary_chunks, summarize_paper, triage_paper
 from .arxiv import Paper, build_interest_query, download_source, get_paper, search
 from .config import load_config
+from .env import load_dotenv
 from .publication import publication_query
 from .tex import collect_source_text
 
@@ -236,7 +237,7 @@ def _screen_payload(payload: dict, state: AppState, progress) -> dict:
         if progress:
             progress({"type": "progress", "message": text, **extra})
 
-    emit(f"???? {selected.isoformat()} ? {', '.join(state.config.interests.categories)} ?????")
+    emit(f"Searching {selected.isoformat()} in {', '.join(state.config.interests.categories)} for candidate papers.")
     actual_date, arxiv_query, candidates = _search_with_lookback(
         selected,
         state.config.interests.categories,
@@ -245,12 +246,12 @@ def _screen_payload(payload: dict, state: AppState, progress) -> dict:
         progress=progress,
     )
     if actual_date != selected:
-        emit(f"{selected.isoformat()} ??????????? {actual_date.isoformat()}?")
-    emit(f"??? {len(candidates)} ?????????????????????", count=len(candidates))
+        emit(f"No candidates found on {selected.isoformat()}; looked back to {actual_date.isoformat()}.")
+    emit(f"Fetched {len(candidates)} candidate papers. Starting title/abstract relevance triage.", count=len(candidates))
 
     screened = []
     for index, paper in enumerate(candidates, start=1):
-        emit(f"??????? {index}/{len(candidates)}?{paper.title}", index=index, total=len(candidates), title=paper.title)
+        emit(f"Analyzing relevance {index}/{len(candidates)}: {paper.title}", index=index, total=len(candidates), title=paper.title)
         triage = triage_paper(paper, interest_description=interest)
         screened.append(
             {
@@ -265,7 +266,7 @@ def _screen_payload(payload: dict, state: AppState, progress) -> dict:
             }
         )
         emit(
-            f"??????? {index}/{len(candidates)}?{paper.title}??? {triage.score}/100?",
+            f"Finished relevance analysis {index}/{len(candidates)}: {paper.title}; score {triage.score}/100.",
             index=index,
             total=len(candidates),
             score=triage.score,
@@ -274,7 +275,7 @@ def _screen_payload(payload: dict, state: AppState, progress) -> dict:
 
     screened.sort(key=lambda item: (item["triage"]["keep"], item["triage"]["score"]), reverse=True)
     kept = _select_relevant(screened)
-    emit(f"??????? {len(kept)} ??????????")
+    emit(f"Screening complete. {len(kept)} papers were marked relevant.")
     result = {
         "query": arxiv_query,
         "interest": interest,
@@ -285,7 +286,7 @@ def _screen_payload(payload: dict, state: AppState, progress) -> dict:
         "screened": screened,
     }
     _save_screen_run(state, result)
-    emit(f"????????{result['run_path']}")
+    emit(f"Screening report saved: {result['run_path']}")
     return result
 
 def _save_screen_run(state: AppState, result: dict) -> None:
@@ -360,14 +361,14 @@ def _deep_read(paper_id: str, state: AppState, interest: str, progress, stream_s
         if progress:
             progress({"type": "progress", "message": text, **extra})
 
-    emit(f"??????????{paper_id}")
+    emit(f"Fetching paper metadata: {paper_id}")
     paper = get_paper(paper_id)
-    emit(f"??????{paper.title}", title=paper.title, arxiv_id=paper.arxiv_id)
-    emit("???? arXiv TeX ???")
+    emit(f"Fetched title: {paper.title}", title=paper.title, arxiv_id=paper.arxiv_id)
+    emit("Downloading arXiv TeX source.")
     source_dir = download_source(paper.arxiv_id)
-    emit("??????????? TeX ???")
+    emit("Source download complete. Parsing TeX files.")
     source_text = collect_source_text(source_dir, max_chars=state.config.reading.max_source_chars)
-    emit(f"TeX ???????????????????????{len(source_text)} ???")
+    emit(f"TeX parsing complete. Sending source excerpt to the model: {len(source_text)} characters.")
     if stream_summary and progress:
         summary_parts: list[str] = []
         provider = "local"
@@ -380,7 +381,7 @@ def _deep_read(paper_id: str, state: AppState, interest: str, progress, stream_s
         result = SummaryResult("".join(summary_parts), used_ai, provider)
     else:
         result = summarize_paper(paper, source_text, explain_for=interest)
-    emit("?????????", provider=result.provider, used_ai=result.used_ai)
+    emit("Summary report generated.", provider=result.provider, used_ai=result.used_ai)
     return paper, source_text, result
 
 
@@ -395,11 +396,11 @@ def _search_with_lookback(
         current = selected - timedelta(days=offset)
         query = build_interest_query(categories, (), current)
         if progress:
-            progress({"type": "progress", "message": f"???? arXiv?{current.isoformat()}??? {candidate_count} ??", "query": query})
+            progress({"type": "progress", "message": f"Requesting arXiv: {current.isoformat()}, up to {candidate_count} papers.", "query": query})
         papers = search(query, max_results=candidate_count, sort_by="submittedDate")
         if progress:
             titles = [paper.title for paper in papers[:8]]
-            progress({"type": "progress", "message": f"{current.isoformat()} ??? {len(papers)} ??", "count": len(papers), "titles": titles})
+            progress({"type": "progress", "message": f"{current.isoformat()} fetched {len(papers)} papers.", "count": len(papers), "titles": titles})
         if papers or offset == lookback_days:
             return current, query, papers
     raise RuntimeError("unreachable")
@@ -430,6 +431,7 @@ def _load_index_html() -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_dotenv()
     parser = argparse.ArgumentParser(prog="arxiv-reader-web")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
