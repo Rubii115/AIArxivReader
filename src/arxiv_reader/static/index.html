@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>arXiv 论文阅读器</title>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["$", "$"], ["\\(", "\\)"]],
+        displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+        processEscapes: true
+      },
+      svg: { fontCache: "global" }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f4;
+      --surface: #ffffff;
+      --line: #d9ded4;
+      --text: #17201a;
+      --muted: #5d675e;
+      --accent: #146b5f;
+      --accent-strong: #0d4f47;
+      --warn: #9b4a15;
+      --soft: #edf2ec;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      padding: 24px 28px 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      font-weight: 720;
+      letter-spacing: 0;
+    }
+    header p {
+      max-width: 980px;
+      margin: 0;
+      color: var(--muted);
+    }
+    main {
+      display: grid;
+      grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+      gap: 18px;
+      padding: 18px;
+      align-items: start;
+    }
+    aside, section {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    aside {
+      position: sticky;
+      top: 14px;
+      padding: 14px;
+    }
+    section {
+      min-height: calc(100vh - 150px);
+      padding: 16px;
+    }
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    button, .button {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 8px 12px;
+      font: inherit;
+      text-decoration: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    button:hover, .button:hover { border-color: var(--accent); }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+    .primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+      font-weight: 650;
+    }
+    .primary:hover { background: var(--accent-strong); }
+    .tab.active {
+      background: var(--soft);
+      border-color: var(--accent);
+      color: var(--accent-strong);
+      font-weight: 650;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      color: var(--text);
+      background: #fff;
+      font: inherit;
+    }
+    textarea {
+      min-height: 118px;
+      resize: vertical;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .hint {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      word-break: break-word;
+    }
+    .status {
+      min-height: 24px;
+      margin-bottom: 10px;
+      color: var(--warn);
+      font-weight: 650;
+    }
+    .progress {
+      display: none;
+      max-height: 220px;
+      overflow: auto;
+      padding: 10px;
+      margin-bottom: 12px;
+      background: #f8faf7;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .progress:not(:empty) { display: block; }
+    .progress-line + .progress-line { margin-top: 6px; }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .papers {
+      display: grid;
+      gap: 12px;
+    }
+    .paper, .workspace {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px;
+    }
+    .paper h2, .workspace h2 {
+      margin: 0 0 8px;
+      font-size: 19px;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 10px;
+      word-break: break-word;
+    }
+    .abstract {
+      color: #273129;
+      margin: 10px 0 14px;
+    }
+    .triage {
+      margin: 10px 0;
+      padding: 10px;
+      background: var(--soft);
+      border-left: 3px solid var(--accent);
+      color: #263428;
+      border-radius: 6px;
+    }
+    .triage span { color: var(--muted); }
+    .summary, .chat {
+      margin-top: 14px;
+    }
+    .message {
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-top: 10px;
+      border: 1px solid var(--line);
+    }
+    .message.user {
+      background: #f7f2e8;
+      margin-left: 48px;
+    }
+    .message.assistant {
+      background: #f6faf8;
+      margin-right: 32px;
+    }
+    .markdown h1, .markdown h2, .markdown h3 {
+      margin: 16px 0 8px;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+    .markdown h1 { font-size: 22px; }
+    .markdown h2 { font-size: 19px; }
+    .markdown h3 { font-size: 16px; }
+    .markdown p { margin: 8px 0; }
+    .markdown ul, .markdown ol {
+      padding-left: 22px;
+      margin: 8px 0;
+    }
+    .markdown blockquote {
+      margin: 10px 0;
+      padding-left: 12px;
+      border-left: 3px solid var(--line);
+      color: var(--muted);
+    }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+    }
+    code {
+      background: #eef3ee;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+    pre {
+      overflow: auto;
+      padding: 10px;
+      background: #101713;
+      color: #eef6ef;
+      border-radius: 8px;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+    a { color: var(--accent-strong); }
+
+    @media (max-width: 860px) {
+      main {
+        grid-template-columns: 1fr;
+        padding: 12px;
+      }
+      aside { position: static; }
+      .row { grid-template-columns: 1fr; }
+      .message.user, .message.assistant {
+        margin-left: 0;
+        margin-right: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>arXiv 论文阅读器</h1>
+    <p>先用题目和摘要做兴趣初筛，再读取 arXiv TeX 源码确认论文真正做了什么。筛选结果会保存成 JSON，之后可以随时回到同一批候选论文。</p>
+  </header>
+
+  <main>
+    <aside>
+      <div class="tabs">
+        <button class="tab active" data-tab="screen">筛选</button>
+        <button class="tab" data-tab="single">单篇</button>
+        <button class="tab" data-tab="find">反查</button>
+      </div>
+
+      <div id="screen" class="panel active">
+        <div class="row">
+          <div>
+            <label for="date">日期</label>
+            <input id="date" type="date">
+          </div>
+          <div>
+            <label for="selectedMode">入选数</label>
+            <input id="selectedMode" value="由 AI 判断" disabled>
+          </div>
+        </div>
+        <label for="candidateCount">初筛候选数</label>
+        <input id="candidateCount" type="number" min="1" max="120" value="60">
+        <label for="lookbackDays">当天为空时回看天数</label>
+        <input id="lookbackDays" type="number" min="0" max="30" value="7">
+        <label for="interest">兴趣描述</label>
+        <textarea id="interest"></textarea>
+        <div class="hint" id="configHint">正在加载配置...</div>
+        <p><button class="primary" id="screenToday">阅读今日论文</button></p>
+        <label for="runSelect">历史筛选报告</label>
+        <select id="runSelect">
+          <option value="">正在加载历史报告...</option>
+        </select>
+        <p class="actions">
+          <button id="loadSelectedRun">加载选中报告</button>
+          <button id="loadLatestRun">加载最新报告</button>
+        </p>
+      </div>
+
+      <div id="single" class="panel">
+        <label for="paperId">arXiv ID 或 URL</label>
+        <input id="paperId" placeholder="例如 2605.04049 或 https://arxiv.org/abs/...">
+        <label for="singleInterest">阅读重点</label>
+        <textarea id="singleInterest"></textarea>
+        <p><button class="primary" id="summarizeOne">深读并开启会话</button></p>
+      </div>
+
+      <div id="find" class="panel">
+        <label for="indexText">出版物索引信息</label>
+        <textarea id="indexText" placeholder="粘贴标题、作者、DOI、BibTeX、DBLP/Crossref 条目"></textarea>
+        <p><button class="primary" id="findPaper">搜索候选 arXiv</button></p>
+      </div>
+    </aside>
+
+    <section>
+      <div class="status" id="status"></div>
+      <div class="progress" id="progressLog"></div>
+      <div class="actions" id="screenControls" style="display:none;margin:12px 0">
+        <button class="backToScreenBtn">返回本次筛选列表</button>
+        <button class="showSelectedBtn">显示相关论文</button>
+        <button class="showAllBtn">显示全部候选</button>
+      </div>
+      <div class="papers" id="results"></div>
+    </section>
+  </main>
+
+  <script>
+    const statusBox = document.querySelector("#status");
+    const progressLog = document.querySelector("#progressLog");
+    const screenControls = document.querySelector("#screenControls");
+    const results = document.querySelector("#results");
+    const interestBox = document.querySelector("#interest");
+    const singleInterestBox = document.querySelector("#singleInterest");
+    const runSelect = document.querySelector("#runSelect");
+    let activeSessionId = null;
+    let currentScreenRun = null;
+    let currentScreenMode = "papers";
+    let mathJaxTimer = null;
+
+    function setStatus(text) {
+      statusBox.textContent = text || "";
+    }
+
+    function clearProgress() {
+      progressLog.innerHTML = "";
+    }
+
+    function addProgress(text) {
+      const line = document.createElement("div");
+      line.className = "progress-line";
+      line.textContent = text;
+      progressLog.appendChild(line);
+      progressLog.scrollTop = progressLog.scrollHeight;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#039;"
+      }[ch]));
+    }
+
+    function scheduleTypeset(node) {
+      if (!window.MathJax || !window.MathJax.typesetPromise) return;
+      clearTimeout(mathJaxTimer);
+      mathJaxTimer = setTimeout(() => {
+        window.MathJax.typesetPromise([node]).catch(() => {});
+      }, 120);
+    }
+
+    function inlineMarkdown(text) {
+      return text
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+    }
+
+    function renderMarkdown(markdown) {
+      const codeBlocks = [];
+      let text = String(markdown ?? "").replace(/\r\n/g, "\n");
+      text = text.replace(/```([\s\S]*?)```/g, (_, code) => {
+        const token = `@@CODEBLOCK${codeBlocks.length}@@`;
+        codeBlocks.push(`<pre><code>${escapeHtml(code.trim())}</code></pre>`);
+        return token;
+      });
+      text = escapeHtml(text);
+      const blocks = text.split(/\n{2,}/).map(block => {
+        const trimmed = block.trim();
+        if (!trimmed) return "";
+        const codeMatch = trimmed.match(/^@@CODEBLOCK(\d+)@@$/);
+        if (codeMatch) return codeBlocks[Number(codeMatch[1])];
+        if (/^#{1,3}\s+/.test(trimmed)) {
+          const level = trimmed.match(/^#+/)[0].length;
+          return `<h${level}>${inlineMarkdown(trimmed.replace(/^#{1,3}\s+/, ""))}</h${level}>`;
+        }
+        const lines = trimmed.split("\n");
+        if (lines.every(line => /^[-*]\s+/.test(line.trim()))) {
+          return `<ul>${lines.map(line => `<li>${inlineMarkdown(line.trim().replace(/^[-*]\s+/, ""))}</li>`).join("")}</ul>`;
+        }
+        if (lines.every(line => /^\d+\.\s+/.test(line.trim()))) {
+          return `<ol>${lines.map(line => `<li>${inlineMarkdown(line.trim().replace(/^\d+\.\s+/, ""))}</li>`).join("")}</ol>`;
+        }
+        if (lines.every(line => /^&gt;\s?/.test(line.trim()))) {
+          return `<blockquote>${lines.map(line => inlineMarkdown(line.trim().replace(/^&gt;\s?/, ""))).join("<br>")}</blockquote>`;
+        }
+        return `<p>${inlineMarkdown(trimmed).replace(/\n/g, "<br>")}</p>`;
+      });
+      return blocks.join("");
+    }
+
+    function renderMarkdownInto(node, markdown) {
+      if (!node) return;
+      node.classList.add("markdown");
+      node.dataset.rawMarkdown = markdown || "";
+      node.innerHTML = renderMarkdown(markdown);
+      scheduleTypeset(node);
+    }
+
+    function currentInterest() {
+      const singleActive = document.querySelector("#single").classList.contains("active");
+      const activeBox = singleActive ? singleInterestBox : interestBox;
+      return activeBox.value.trim() || interestBox.value.trim() || singleInterestBox.value.trim();
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        headers: { "Content-Type": "application/json" },
+        ...options
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Request failed");
+      return data;
+    }
+
+    async function streamJson(path, payload, onEvent) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error("Stream request failed");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop();
+        for (const event of events) {
+          const line = event.split("\n").find(item => item.startsWith("data: "));
+          if (!line) continue;
+          const data = JSON.parse(line.slice(6));
+          if (data.type === "error") throw new Error(data.error);
+          onEvent(data);
+        }
+      }
+    }
+
+    function paperCard(item, includeTriage = false) {
+      const paper = item.paper || item;
+      const triage = item.triage;
+      const categories = Array.isArray(paper.categories) ? paper.categories : [];
+      const authors = Array.isArray(paper.authors) ? paper.authors : [];
+      const triageHtml = includeTriage && triage
+        ? `<div class="triage"><strong>${triage.keep ? "相关" : "不相关"} · ${triage.score}/100</strong><br>${escapeHtml(triage.reason)}<br><span>${escapeHtml((triage.matched_interests || []).join(", "))}</span></div>`
+        : "";
+      return `<article class="paper">
+        <h2>${escapeHtml(paper.title)}</h2>
+        <div class="meta">arXiv: ${escapeHtml(paper.arxiv_id)} · ${escapeHtml(categories.join(", "))}<br>${escapeHtml(authors.slice(0, 8).join(", "))}</div>
+        ${triageHtml}
+        <p class="abstract">${escapeHtml(paper.summary)}</p>
+        <div class="actions">
+          <button data-paper="${escapeHtml(paper.arxiv_id)}" class="sessionBtn">开启临时会话</button>
+          <button data-paper="${escapeHtml(paper.arxiv_id)}" class="summarizeBtn">深读源码</button>
+          <a class="button" href="${escapeHtml(paper.abs_url)}" target="_blank" rel="noreferrer">Abs</a>
+          <a class="button" href="${escapeHtml(paper.pdf_url || paper.abs_url)}" target="_blank" rel="noreferrer">PDF</a>
+        </div>
+      </article>`;
+    }
+
+    function screenToolbar(data, mode) {
+      const selected = (data.papers || []).length;
+      const total = (data.screened || []).length;
+      return `<div class="paper">
+        <div class="meta">筛选报告：${escapeHtml(data.run_id || "未保存")} · 相关 ${selected} 篇 · 候选 ${total} 篇<br>${escapeHtml(data.run_path || "")}</div>
+        <div class="actions">
+          <button class="showSelectedBtn" ${mode === "papers" ? "disabled" : ""}>显示相关论文</button>
+          <button class="showAllBtn" ${mode === "screened" ? "disabled" : ""}>显示全部候选</button>
+        </div>
+      </div>`;
+    }
+
+    function renderScreenRun(data, mode = "papers") {
+      currentScreenRun = data;
+      currentScreenMode = mode;
+      screenControls.style.display = "flex";
+      const items = mode === "screened" ? (data.screened || []) : (data.papers || []);
+      results.innerHTML = screenToolbar(data, mode) + (items.length
+        ? items.map(item => paperCard(item, true)).join("")
+        : `<div class="paper">没有找到候选论文。</div>`);
+    }
+
+    function beginWorkspaceFromPaper(paper, provider = "pending", usedAi = false) {
+      results.innerHTML = `<div class="workspace">
+        <h2>${escapeHtml(paper.title)}</h2>
+        <div class="meta" id="workspaceMeta">arXiv: ${escapeHtml(paper.arxiv_id)} · Provider: ${escapeHtml(provider)} · AI: ${usedAi ? "yes" : "no"}</div>
+        <div class="actions">${currentScreenRun ? '<button class="backToScreenBtn">返回本次筛选列表</button>' : ""}</div>
+        <div class="summary" id="summaryBox"></div>
+        <div class="chat" id="chat"></div>
+        <label for="question">继续追问这篇论文</label>
+        <textarea id="question" placeholder="例如：这篇真正的新意是什么？关键近似是否可靠？哪条公式最值得核查？" disabled></textarea>
+        <p><button class="primary" id="askBtn" disabled>发送</button></p>
+      </div>`;
+      renderMarkdownInto(document.querySelector("#summaryBox"), "");
+    }
+
+    function finishWorkspaceSession(data) {
+      activeSessionId = data.session_id;
+      const meta = document.querySelector("#workspaceMeta");
+      if (meta) meta.textContent = `arXiv: ${data.paper.arxiv_id} · Provider: ${data.provider} · AI: ${data.used_ai ? "yes" : "no"}`;
+      const question = document.querySelector("#question");
+      const ask = document.querySelector("#askBtn");
+      if (question) question.disabled = false;
+      if (ask) ask.disabled = false;
+      renderMarkdownInto(document.querySelector("#summaryBox"), data.summary);
+    }
+
+    function appendMessage(role, text, markdown = false) {
+      const chat = document.querySelector("#chat");
+      const node = document.createElement("div");
+      node.className = `message ${role}`;
+      if (markdown) renderMarkdownInto(node, text);
+      else node.textContent = text;
+      chat.appendChild(node);
+      return node;
+    }
+
+    async function loadConfig() {
+      const cfg = await api("/api/config");
+      interestBox.value = cfg.explain_for;
+      singleInterestBox.value = cfg.explain_for;
+      document.querySelector("#candidateCount").value = cfg.default_candidates || 60;
+      document.querySelector("#configHint").innerHTML =
+        `<strong>检索分类</strong>：${escapeHtml(cfg.categories.join(", "))}<br>` +
+        `<strong>AI</strong>：${escapeHtml(cfg.ai_provider)} / ${escapeHtml(cfg.deepseek_model)} / key ${cfg.deepseek_key_present ? "已读取" : "未读取"}<br>` +
+        `<strong>说明</strong>：默认抓取候选论文后，由 AI 判断所有相关论文；点进论文后才会读取 TeX 源码。`;
+    }
+
+    function runLabel(run) {
+      const saved = run.saved_at ? run.saved_at.replace("T", " ") : "未知时间";
+      const datePart = run.actual_date || run.requested_date || "未知日期";
+      return `${saved} · ${datePart} · 相关 ${run.paper_count} / 候选 ${run.screened_count}`;
+    }
+
+    async function refreshRunList(preferredRunId = "") {
+      const data = await api("/api/runs");
+      runSelect.innerHTML = "";
+      if (!data.runs.length) {
+        runSelect.append(new Option("还没有保存过筛选报告", ""));
+        runSelect.disabled = true;
+        return [];
+      }
+      runSelect.disabled = false;
+      for (const run of data.runs) {
+        const option = new Option(runLabel(run), run.run_id);
+        option.title = run.run_path || run.run_id;
+        runSelect.append(option);
+      }
+      if (preferredRunId && data.runs.some(run => run.run_id === preferredRunId)) {
+        runSelect.value = preferredRunId;
+      }
+      return data.runs;
+    }
+
+    async function loadRunById(runId) {
+      if (!runId) {
+        setStatus("请先选择一个历史筛选报告。");
+        return;
+      }
+      const data = await api(`/api/run?id=${encodeURIComponent(runId)}`);
+      clearProgress();
+      renderScreenRun(data, "papers");
+      setStatus(`已加载筛选报告：${data.run_id}`);
+    }
+
+    async function openSession(paperId) {
+      clearProgress();
+      setStatus("正在建立论文会话...");
+      let streamedSummary = "";
+      await streamJson("/api/session/stream", { paper: paperId, interest: currentInterest() }, event => {
+        if (event.type === "progress") addProgress(event.message);
+        if (event.type === "summary_start") {
+          streamedSummary = "";
+          beginWorkspaceFromPaper(event.paper, event.provider, event.used_ai);
+          setStatus("正在流式生成首次总结...");
+        }
+        if (event.type === "summary_chunk") {
+          streamedSummary += event.text;
+          const box = document.querySelector("#summaryBox");
+          if (box) renderMarkdownInto(box, streamedSummary);
+          const meta = document.querySelector("#workspaceMeta");
+          if (meta) meta.textContent = `Provider: ${event.provider} · AI: ${event.used_ai ? "yes" : "no"} · 正在生成总结`;
+        }
+        if (event.type === "done") {
+          finishWorkspaceSession(event.result);
+          setStatus("");
+        }
+      });
+    }
+
+    async function summarize(paperId) {
+      await openSession(paperId);
+    }
+
+    async function askStreaming(question) {
+      appendMessage("user", question);
+      const answerNode = appendMessage("assistant", "", true);
+      setStatus("正在流式生成回答...");
+      await streamJson("/api/session/message/stream", {
+        session_id: activeSessionId,
+        message: question,
+        interest: currentInterest()
+      }, event => {
+        if (event.type === "chunk") {
+          renderMarkdownInto(answerNode, (answerNode.dataset.rawMarkdown || "") + event.text);
+        }
+        if (event.type === "done") setStatus("");
+      });
+    }
+
+    document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(item => item.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach(item => item.classList.remove("active"));
+      tab.classList.add("active");
+      document.querySelector(`#${tab.dataset.tab}`).classList.add("active");
+    }));
+
+    document.querySelector("#date").valueAsDate = new Date();
+
+    document.querySelector("#screenToday").addEventListener("click", async clickEvent => {
+      try {
+        clickEvent.target.disabled = true;
+        clearProgress();
+        results.innerHTML = "";
+        setStatus("正在筛选论文...");
+        await streamJson("/api/screen/stream", {
+          date: document.querySelector("#date").value,
+          candidate_count: Number(document.querySelector("#candidateCount").value),
+          lookback_days: Number(document.querySelector("#lookbackDays").value),
+          interest: currentInterest()
+        }, event => {
+          if (event.type === "progress") addProgress(event.message);
+          if (event.type === "done") {
+            const data = event.result;
+            renderScreenRun(data, "papers");
+            refreshRunList(data.run_id).catch(() => {});
+            if (data.lookback_used) setStatus(`所选日期没有新 quant-ph，已回看至 ${data.actual_date}。`);
+            else setStatus("");
+          }
+        });
+      } catch (error) {
+        setStatus(error.message);
+      } finally {
+        clickEvent.target.disabled = false;
+      }
+    });
+
+    document.querySelector("#loadLatestRun").addEventListener("click", async () => {
+      try {
+        const runs = await refreshRunList();
+        if (!runs.length) {
+          setStatus("还没有保存过筛选报告。");
+          return;
+        }
+        runSelect.value = runs[0].run_id;
+        await loadRunById(runs[0].run_id);
+      } catch (error) {
+        setStatus(error.message);
+      }
+    });
+
+    document.querySelector("#loadSelectedRun").addEventListener("click", async () => {
+      try {
+        await loadRunById(runSelect.value);
+      } catch (error) {
+        setStatus(error.message);
+      }
+    });
+
+    document.querySelector("#summarizeOne").addEventListener("click", async () => {
+      try {
+        await summarize(document.querySelector("#paperId").value);
+      } catch (error) {
+        setStatus(error.message);
+      }
+    });
+
+    document.querySelector("#findPaper").addEventListener("click", async () => {
+      try {
+        setStatus("正在搜索候选论文...");
+        const data = await api("/api/find", {
+          method: "POST",
+          body: JSON.stringify({ index: document.querySelector("#indexText").value, limit: 5 })
+        });
+        results.innerHTML = data.papers.length
+          ? data.papers.map(paper => paperCard(paper)).join("")
+          : `<div class="paper">没有找到候选论文。</div>`;
+        setStatus("");
+      } catch (error) {
+        setStatus(error.message);
+      }
+    });
+
+    results.addEventListener("click", async event => {
+      try {
+        if (event.target.matches(".backToScreenBtn") && currentScreenRun) renderScreenRun(currentScreenRun, currentScreenMode);
+        if (event.target.matches(".showSelectedBtn") && currentScreenRun) renderScreenRun(currentScreenRun, "papers");
+        if (event.target.matches(".showAllBtn") && currentScreenRun) renderScreenRun(currentScreenRun, "screened");
+        if (event.target.matches(".summarizeBtn")) await summarize(event.target.dataset.paper);
+        if (event.target.matches(".sessionBtn")) await openSession(event.target.dataset.paper);
+        if (event.target.matches("#askBtn")) {
+          const questionBox = document.querySelector("#question");
+          const question = questionBox.value.trim();
+          if (!question || !activeSessionId) return;
+          questionBox.value = "";
+          await askStreaming(question);
+        }
+      } catch (error) {
+        setStatus(error.message);
+      }
+    });
+
+    screenControls.addEventListener("click", event => {
+      if (event.target.matches(".backToScreenBtn") && currentScreenRun) renderScreenRun(currentScreenRun, currentScreenMode);
+      if (event.target.matches(".showSelectedBtn") && currentScreenRun) renderScreenRun(currentScreenRun, "papers");
+      if (event.target.matches(".showAllBtn") && currentScreenRun) renderScreenRun(currentScreenRun, "screened");
+    });
+
+    Promise.all([
+      loadConfig(),
+      refreshRunList()
+    ]).catch(error => setStatus(error.message));
+  </script>
+</body>
+</html>

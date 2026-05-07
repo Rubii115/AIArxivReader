@@ -1,0 +1,25 @@
+[interests]
+categories = ["quant-ph"]
+keywords = [
+  "quantum information",
+  "quantum computing",
+  "quantum simulation",
+  "entanglement",
+  "quantum error correction",
+  "many-body",
+  "superconducting qubit",
+]
+explain_for = """
+我是超导量子计算实验方向的研究者。请把论文按“是否值得我进一步读”来筛选，而不是只按标题是否包含热门词。
+
+我关注超导量子计算实验、量子模拟、量子纠错、量子调控、量子测量、开放量子系统、噪声建模和实验可观测量。只要论文能启发超导量子平台探索量子物理热点问题，即使不是直接用超导体系，也应当给出较高关注。
+
+我也对有清晰物理机制或新量子图像的理论模型感兴趣，包括多体物理、非厄密物理、量子信息、量子热力学、拓扑现象和动力学相变。请特别关注论文是否提出具体 Hamiltonian、动力学机制、控制方法、误差模型、可观测量或可实验验证的预测。
+
+判断相关性时请区分“标题很 fancy”与“真正有工作点”。优先保留有明确物理问题、可复现实验/理论框架、可能影响量子平台设计或解释实验现象的论文。
+"""
+
+[reading]
+max_source_chars = 120000
+max_papers_per_run = 10
+candidate_count = 60

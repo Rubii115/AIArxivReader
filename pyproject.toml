@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arxiv-reader"
+version = "0.1.0"
+description = "AI-assisted arXiv source reader and paper triage tool."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "arxiv_reader" }]
+dependencies = []
+
+[project.scripts]
+arxiv-reader = "arxiv_reader.cli:main"
+arxiv-reader-web = "arxiv_reader.web:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+arxiv_reader = ["static/*.html"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
