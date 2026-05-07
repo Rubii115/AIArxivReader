@@ -1,5 +1,19 @@
 # AIArxivReader
 
+## 一键安装和启动
+
+Windows 用户可以直接使用两个批处理脚本：
+
+1. 双击 `install.bat`：创建虚拟环境、安装项目，并生成 `config.toml` 和 `.env`。
+2. 打开 `.env`，把 `DEEPSEEK_API_KEY` 改成你的真实 DeepSeek API Key。
+3. 双击 `start.bat`：自动激活虚拟环境、打开浏览器并启动 Web UI。
+
+默认地址是：
+
+[http://127.0.0.1:8765](http://127.0.0.1:8765)
+
+`.env` 和 `config.toml` 都是本地文件，已经在 `.gitignore` 里，不会上传到 GitHub。
+
 一个面向量子物理研究者的 AI arXiv 阅读助手。它会先用题目和摘要筛选每日 `quant-ph` 新论文，再对你点开的论文下载 arXiv TeX 源码，让模型精读正文、公式和结构，最后在 Web UI 里继续追问。
 
 ## 主要功能
