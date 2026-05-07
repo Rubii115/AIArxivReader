@@ -16,7 +16,7 @@ class Interests:
 class ReadingConfig:
     max_source_chars: int = 120_000
     max_papers_per_run: int = 10
-    candidate_count: int = 60
+    candidate_count: int = 120
 
 
 @dataclass(frozen=True)

@@ -305,8 +305,8 @@
             <input id="selectedMode" value="由 AI 判断" disabled>
           </div>
         </div>
-        <label for="candidateCount">初筛候选数</label>
-        <input id="candidateCount" type="number" min="1" max="120" value="60">
+        <label for="candidateCount">候选抓取上限</label>
+        <input id="candidateCount" type="number" min="1" max="200" value="120">
         <label for="lookbackDays">当天为空时回看天数</label>
         <input id="lookbackDays" type="number" min="0" max="30" value="7">
         <label for="interest">兴趣描述</label>
@@ -513,8 +513,10 @@
     function screenToolbar(data, mode) {
       const selected = (data.papers || []).length;
       const total = (data.screened || []).length;
+      const available = data.total_candidates_available || total;
+      const coverage = available > total ? ` · 已抓 ${total}/${available}` : "";
       return `<div class="paper">
-        <div class="meta">筛选报告：${escapeHtml(data.run_id || "未保存")} · 相关 ${selected} 篇 · 候选 ${total} 篇<br>${escapeHtml(data.run_path || "")}</div>
+        <div class="meta">筛选报告：${escapeHtml(data.run_id || "未保存")} · 相关 ${selected} 篇 · 候选 ${total} 篇${coverage}<br>${escapeHtml(data.run_path || "")}</div>
         <div class="actions">
           <button class="showSelectedBtn" ${mode === "papers" ? "disabled" : ""}>显示相关论文</button>
           <button class="showAllBtn" ${mode === "screened" ? "disabled" : ""}>显示全部候选</button>
@@ -571,11 +573,11 @@
       const cfg = await api("/api/config");
       interestBox.value = cfg.explain_for;
       singleInterestBox.value = cfg.explain_for;
-      document.querySelector("#candidateCount").value = cfg.default_candidates || 60;
+      document.querySelector("#candidateCount").value = cfg.default_candidates || 120;
       document.querySelector("#configHint").innerHTML =
         `<strong>检索分类</strong>：${escapeHtml(cfg.categories.join(", "))}<br>` +
         `<strong>AI</strong>：${escapeHtml(cfg.ai_provider)} / ${escapeHtml(cfg.deepseek_model)} / key ${cfg.deepseek_key_present ? "已读取" : "未读取"}<br>` +
-        `<strong>说明</strong>：默认抓取候选论文后，由 AI 判断所有相关论文；点进论文后才会读取 TeX 源码。`;
+        `<strong>说明</strong>：候选抓取上限是防止极端日期一次抓太多；若 arXiv 当天总数超过上限，进度区会提示你调高。`;
     }
 
     function runLabel(run) {

@@ -9,13 +9,14 @@ def test_search_with_lookback_uses_recent_non_empty_day(monkeypatch):
 
     def fake_search(query, *, max_results, sort_by):
         calls.append(query)
-        return ["paper"] if "20260505" in query else []
+        return SimpleNamespace(papers=["paper"], total_results=1) if "20260505" in query else SimpleNamespace(papers=[], total_results=0)
 
-    monkeypatch.setattr("arxiv_reader.web.search", fake_search)
-    actual_date, query, papers = _search_with_lookback(date(2026, 5, 7), ("quant-ph",), 60, 7)
+    monkeypatch.setattr("arxiv_reader.web.search_with_total", fake_search)
+    actual_date, query, papers, total_results = _search_with_lookback(date(2026, 5, 7), ("quant-ph",), 60, 7)
     assert actual_date == date(2026, 5, 5)
     assert "20260505" in query
     assert papers == ["paper"]
+    assert total_results == 1
     assert len(calls) == 3
 
 

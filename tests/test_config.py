@@ -4,7 +4,7 @@ from arxiv_reader.config import DEFAULT_CONFIG, load_config
 
 
 def test_default_config_includes_candidate_count():
-    assert DEFAULT_CONFIG.reading.candidate_count == 60
+    assert DEFAULT_CONFIG.reading.candidate_count == 120
 
 
 def test_load_config_reads_candidate_count(tmp_path: Path):

@@ -38,6 +38,12 @@ class Paper:
     abs_url: str
 
 
+@dataclass(frozen=True)
+class SearchResult:
+    papers: list[Paper]
+    total_results: int
+
+
 def normalize_arxiv_id(value: str) -> str:
     value = value.strip()
     value = re.sub(r"^https?://arxiv\.org/(abs|pdf|e-print)/", "", value)
@@ -62,16 +68,20 @@ def build_interest_query(categories: tuple[str, ...], keywords: tuple[str, ...],
 
 
 def search(query: str, *, max_results: int = 10, sort_by: str = "relevance") -> list[Paper]:
+    return search_with_total(query, max_results=max_results, sort_by=sort_by).papers
+
+
+def search_with_total(query: str, *, max_results: int = 10, sort_by: str = "relevance", start: int = 0) -> SearchResult:
     params = {
         "search_query": query,
-        "start": "0",
+        "start": str(start),
         "max_results": str(max_results),
         "sortBy": sort_by,
         "sortOrder": "descending",
     }
     url = ARXIV_API + "?" + urllib.parse.urlencode(params)
     xml_bytes = _http_get(url)
-    return parse_atom(xml_bytes)
+    return SearchResult(parse_atom(xml_bytes), parse_total_results(xml_bytes))
 
 
 def get_paper(paper_id: str) -> Paper:
@@ -170,6 +180,16 @@ def parse_atom(xml_bytes: bytes) -> list[Paper]:
             )
         )
     return papers
+
+
+def parse_total_results(xml_bytes: bytes) -> int:
+    root = ET.fromstring(xml_bytes)
+    ns = {"opensearch": "http://a9.com/-/spec/opensearch/1.1/"}
+    value = _text(root, "opensearch:totalResults", ns)
+    try:
+        return int(value)
+    except ValueError:
+        return 0
 
 
 def _http_get(url: str) -> bytes:

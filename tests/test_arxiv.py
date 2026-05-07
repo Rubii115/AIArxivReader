@@ -3,7 +3,7 @@ from email.message import Message
 import urllib.error
 
 from arxiv_reader import arxiv
-from arxiv_reader.arxiv import build_interest_query, get_paper_from_abs_page, normalize_arxiv_id
+from arxiv_reader.arxiv import build_interest_query, get_paper_from_abs_page, normalize_arxiv_id, parse_total_results
 
 
 def test_normalize_arxiv_id_accepts_urls_and_plain_ids():
@@ -32,6 +32,16 @@ def test_get_paper_from_abs_page_parses_arxiv_html(monkeypatch):
     assert paper.authors == ("Ada Lovelace", "Alan Turing")
     assert paper.summary == "A useful abstract."
     assert paper.categories == ("quant-ph",)
+
+
+def test_parse_total_results_reads_opensearch_count():
+    xml = b"""
+    <feed xmlns="http://www.w3.org/2005/Atom"
+          xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+      <opensearch:totalResults>67</opensearch:totalResults>
+    </feed>
+    """
+    assert parse_total_results(xml) == 67
 
 
 def test_http_get_retries_429_with_retry_after(monkeypatch):

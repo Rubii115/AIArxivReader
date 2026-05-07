@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from .ai import SummaryResult, answer_question, stream_answer_chunks, stream_summary_chunks, summarize_paper, triage_paper
-from .arxiv import Paper, build_interest_query, download_source, get_paper, search
+from .arxiv import Paper, build_interest_query, download_source, get_paper, search, search_with_total
 from .config import load_config
 from .env import load_dotenv
 from .publication import publication_query
@@ -238,7 +238,7 @@ def _screen_payload(payload: dict, state: AppState, progress) -> dict:
             progress({"type": "progress", "message": text, **extra})
 
     emit(f"Searching {selected.isoformat()} in {', '.join(state.config.interests.categories)} for candidate papers.")
-    actual_date, arxiv_query, candidates = _search_with_lookback(
+    actual_date, arxiv_query, candidates, total_available = _search_with_lookback(
         selected,
         state.config.interests.categories,
         candidate_count,
@@ -248,6 +248,14 @@ def _screen_payload(payload: dict, state: AppState, progress) -> dict:
     if actual_date != selected:
         emit(f"No candidates found on {selected.isoformat()}; looked back to {actual_date.isoformat()}.")
     emit(f"Fetched {len(candidates)} candidate papers. Starting title/abstract relevance triage.", count=len(candidates))
+    if total_available > len(candidates):
+        emit(
+            f"Warning: arXiv reports {total_available} matching papers, but the current candidate limit is {candidate_count}. "
+            f"{total_available - len(candidates)} papers were not screened. Increase the candidate limit to avoid missing papers.",
+            total_available=total_available,
+            fetched=len(candidates),
+            limit=candidate_count,
+        )
 
     screened = []
     for index, paper in enumerate(candidates, start=1):
@@ -282,6 +290,7 @@ def _screen_payload(payload: dict, state: AppState, progress) -> dict:
         "requested_date": selected.isoformat(),
         "actual_date": actual_date.isoformat(),
         "lookback_used": actual_date != selected,
+        "total_candidates_available": total_available,
         "papers": kept,
         "screened": screened,
     }
@@ -397,12 +406,21 @@ def _search_with_lookback(
         query = build_interest_query(categories, (), current)
         if progress:
             progress({"type": "progress", "message": f"Requesting arXiv: {current.isoformat()}, up to {candidate_count} papers.", "query": query})
-        papers = search(query, max_results=candidate_count, sort_by="submittedDate")
+        search_result = search_with_total(query, max_results=candidate_count, sort_by="submittedDate")
+        papers = search_result.papers
         if progress:
             titles = [paper.title for paper in papers[:8]]
-            progress({"type": "progress", "message": f"{current.isoformat()} fetched {len(papers)} papers.", "count": len(papers), "titles": titles})
+            progress(
+                {
+                    "type": "progress",
+                    "message": f"{current.isoformat()} fetched {len(papers)} of {search_result.total_results} matching papers.",
+                    "count": len(papers),
+                    "total_available": search_result.total_results,
+                    "titles": titles,
+                }
+            )
         if papers or offset == lookback_days:
-            return current, query, papers
+            return current, query, papers, search_result.total_results
     raise RuntimeError("unreachable")
 
 def _required(payload: dict, key: str) -> str:

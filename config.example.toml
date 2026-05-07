@@ -22,4 +22,4 @@ explain_for = """
 [reading]
 max_source_chars = 120000
 max_papers_per_run = 10
-candidate_count = 60
+candidate_count = 120
