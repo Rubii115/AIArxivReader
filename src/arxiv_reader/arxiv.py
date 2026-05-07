@@ -21,7 +21,7 @@ import xml.etree.ElementTree as ET
 
 ARXIV_API = "https://export.arxiv.org/api/query"
 ARXIV_EPRINT = "https://arxiv.org/e-print/{paper_id}"
-USER_AGENT = "arxiv-reader/0.1 (mailto:local@example.invalid)"
+DEFAULT_USER_AGENT = "AIArxivReader/0.1 (https://github.com/Rubii115/AIArxivReader; mailto:local@example.invalid)"
 RETRYABLE_HTTP_STATUS = {429, 503}
 MAX_HTTP_ATTEMPTS = 5
 ARXIV_API_MIN_INTERVAL_SECONDS = 3.1
@@ -198,12 +198,12 @@ def parse_total_results(xml_bytes: bytes) -> int:
 
 def _http_get(url: str) -> bytes:
     _respect_arxiv_api_rate_limit(url)
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    request = urllib.request.Request(url, headers=_request_headers())
     last_error: Exception | None = None
     for attempt in range(MAX_HTTP_ATTEMPTS):
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
-                return response.read()
+                return _decode_response(response.read(), response.headers.get("Content-Encoding", ""))
         except urllib.error.HTTPError as exc:
             last_error = exc
             if exc.code in RETRYABLE_HTTP_STATUS and attempt < MAX_HTTP_ATTEMPTS - 1:
@@ -219,6 +219,24 @@ def _http_get(url: str) -> bytes:
     assert last_error is not None
     reason = getattr(last_error, "reason", last_error)
     raise RuntimeError(f"Network error while requesting {url}: {reason}") from last_error
+
+
+def _request_headers() -> dict[str, str]:
+    return {
+        "User-Agent": os.environ.get("ARXIV_USER_AGENT", DEFAULT_USER_AGENT),
+        "Accept": "application/atom+xml, application/xml;q=0.9, text/html;q=0.8, */*;q=0.5",
+        "Accept-Encoding": "gzip",
+        "Connection": "close",
+    }
+
+
+def _decode_response(data: bytes, encoding: str) -> bytes:
+    if encoding.lower() == "gzip":
+        try:
+            return gzip.decompress(data)
+        except gzip.BadGzipFile:
+            return data
+    return data
 
 
 def _retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float:

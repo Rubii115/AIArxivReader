@@ -51,6 +51,8 @@ def test_http_get_retries_429_with_retry_after(monkeypatch):
     headers["Retry-After"] = "1"
 
     class Response:
+        headers = {}
+
         def __enter__(self):
             return self
 
@@ -79,6 +81,8 @@ def test_http_get_rate_limits_arxiv_api_requests(monkeypatch):
     timestamps = iter([10.0, 10.0, 10.5, 13.6])
 
     class Response:
+        headers = {}
+
         def __enter__(self):
             return self
 
@@ -96,3 +100,12 @@ def test_http_get_rate_limits_arxiv_api_requests(monkeypatch):
     assert arxiv._http_get(arxiv.ARXIV_API + "?q=one") == b"ok"
     assert arxiv._http_get(arxiv.ARXIV_API + "?q=two") == b"ok"
     assert sleeps == [2.6]
+
+
+def test_request_headers_use_configurable_user_agent(monkeypatch):
+    monkeypatch.setenv("ARXIV_USER_AGENT", "DemoClient/1.0 (mailto:demo@example.com)")
+
+    headers = arxiv._request_headers()
+
+    assert headers["User-Agent"] == "DemoClient/1.0 (mailto:demo@example.com)"
+    assert "application/atom+xml" in headers["Accept"]

@@ -157,9 +157,12 @@ arxiv-reader find "Attention Is All You Need Vaswani 2017"
 ```text
 DEEPSEEK_API_KEY=sk-...
 DEEPSEEK_MODEL=deepseek-v4-flash
+ARXIV_USER_AGENT=AIArxivReader/0.1 (https://github.com/Rubii115/AIArxivReader; mailto:your_email@example.com)
 ```
 
 然后重启 `arxiv-reader-web`。服务启动时会读取 `.env`，运行中修改 `.env` 需要重启服务才生效。
+
+`ARXIV_USER_AGENT` 不是密钥，但建议填一个能识别项目和联系人的值。它不会绕过 arXiv 限流，只是让请求更规范；程序仍然会对 arXiv API 请求保持约 3 秒间隔。
 
 ### `.env` 会不会被上传？
 
