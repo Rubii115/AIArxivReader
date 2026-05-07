@@ -72,3 +72,27 @@ def test_http_get_retries_429_with_retry_after(monkeypatch):
     assert arxiv._http_get("https://export.arxiv.org/api/query?q=test") == b"ok"
     assert len(calls) == 2
     assert sleeps == [1.0]
+
+
+def test_http_get_rate_limits_arxiv_api_requests(monkeypatch):
+    sleeps = []
+    timestamps = iter([10.0, 10.0, 10.5, 13.6])
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"ok"
+
+    monkeypatch.setattr(arxiv.urllib.request, "urlopen", lambda request, timeout: Response())
+    monkeypatch.setattr(arxiv.time, "monotonic", lambda: next(timestamps))
+    monkeypatch.setattr(arxiv.time, "sleep", lambda seconds: sleeps.append(round(seconds, 1)))
+    monkeypatch.setattr(arxiv, "_LAST_ARXIV_API_REQUEST_AT", 0.0)
+
+    assert arxiv._http_get(arxiv.ARXIV_API + "?q=one") == b"ok"
+    assert arxiv._http_get(arxiv.ARXIV_API + "?q=two") == b"ok"
+    assert sleeps == [2.6]

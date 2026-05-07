@@ -11,6 +11,7 @@ import os
 import re
 import tarfile
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -23,6 +24,9 @@ ARXIV_EPRINT = "https://arxiv.org/e-print/{paper_id}"
 USER_AGENT = "arxiv-reader/0.1 (mailto:local@example.invalid)"
 RETRYABLE_HTTP_STATUS = {429, 503}
 MAX_HTTP_ATTEMPTS = 5
+ARXIV_API_MIN_INTERVAL_SECONDS = 3.1
+_ARXIV_API_LOCK = threading.Lock()
+_LAST_ARXIV_API_REQUEST_AT = 0.0
 
 
 @dataclass(frozen=True)
@@ -193,6 +197,7 @@ def parse_total_results(xml_bytes: bytes) -> int:
 
 
 def _http_get(url: str) -> bytes:
+    _respect_arxiv_api_rate_limit(url)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     last_error: Exception | None = None
     for attempt in range(MAX_HTTP_ATTEMPTS):
@@ -237,6 +242,18 @@ def _http_error_message(exc: urllib.error.HTTPError, url: str) -> str:
             "wait a few minutes, reduce the candidate count, or retry later."
         )
     return f"HTTP {exc.code} while requesting {url}"
+
+
+def _respect_arxiv_api_rate_limit(url: str) -> None:
+    if not url.startswith(ARXIV_API):
+        return
+    global _LAST_ARXIV_API_REQUEST_AT
+    with _ARXIV_API_LOCK:
+        now = time.monotonic()
+        wait_for = ARXIV_API_MIN_INTERVAL_SECONDS - (now - _LAST_ARXIV_API_REQUEST_AT)
+        if wait_for > 0:
+            time.sleep(wait_for)
+        _LAST_ARXIV_API_REQUEST_AT = time.monotonic()
 
 
 def _text(node: ET.Element, path: str, ns: dict[str, str]) -> str:
