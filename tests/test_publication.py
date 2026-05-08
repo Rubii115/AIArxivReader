@@ -18,3 +18,11 @@ def test_publication_query_extracts_bibtex_title_author_and_doi():
     assert 'ti:"A Useful Paper About Retrieval"' in query
     assert 'all:"10.1145/1234567.8901234"' in query
     assert 'au:"Ada Lovelace"' in query
+
+
+def test_publication_query_splits_plain_title_author_citation():
+    query = publication_query("Ultraviolet Completion of the Big Bang in Quadratic Gravity, Ruolin Liu")
+
+    assert 'all:"Ultraviolet Completion of the Big Bang in Quadratic Gravity"' in query
+    assert 'au:"Ruolin Liu"' not in query
+    assert "Quadratic Gravity, Ruolin Liu" not in query

@@ -9,12 +9,15 @@ def publication_query(index_text: str) -> str:
         return f"id:{arxiv_id}"
 
     doi = _find_doi(index_text)
-    title = _find_title(index_text)
+    title, plain_authors = _find_plain_title_authors(index_text)
+    if not title:
+        title = _find_title(index_text)
     authors = _find_authors(index_text)
 
     terms: list[str] = []
     if title:
-        terms.append(f'ti:"{title}"')
+        prefix = "all" if plain_authors else "ti"
+        terms.append(f'{prefix}:"{title}"')
     if doi:
         terms.append(f'all:"{doi}"')
     for author in authors[:2]:
@@ -50,6 +53,20 @@ def _find_title(text: str) -> str:
     return ""
 
 
+def _find_plain_title_authors(text: str) -> tuple[str, list[str]]:
+    line = _compact(text)
+    if "\n" in text or not line or "@" in line or _find_doi(line):
+        return "", []
+    parts = [part.strip(" .") for part in line.split(",") if part.strip(" .")]
+    if len(parts) < 2:
+        return "", []
+    title = parts[0]
+    if len(title) < 8 or re.search(r"\b(author|doi|journal|booktitle|year)\b\s*=", title, re.I):
+        return "", []
+    authors = [part for part in parts[1:] if _looks_like_author(part)]
+    return (title, authors) if authors else ("", [])
+
+
 def _find_authors(text: str) -> list[str]:
     bib_author = re.search(r"author\s*=\s*[{\"\'](.+?)[}\"']", text, re.I | re.S)
     if not bib_author:
@@ -57,6 +74,11 @@ def _find_authors(text: str) -> list[str]:
     raw = bib_author.group(1)
     names = re.split(r"\s+and\s+|;", raw)
     return [_compact(name) for name in names if _compact(name)]
+
+
+def _looks_like_author(value: str) -> bool:
+    words = value.split()
+    return 1 <= len(words) <= 5 and all(re.search(r"[A-Za-z]", word) for word in words)
 
 
 def _compact(text: str) -> str:

@@ -9,6 +9,7 @@ import gzip
 import io
 import os
 import re
+import socket
 import tarfile
 import tempfile
 import threading
@@ -212,7 +213,7 @@ def _http_get(url: str, *, progress=None) -> bytes:
                 time.sleep(delay)
                 continue
             raise RuntimeError(_http_error_message(exc, url)) from exc
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
             last_error = exc
             if attempt < MAX_HTTP_ATTEMPTS - 1:
                 delay = 0.8 * (attempt + 1)
