@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
 import tomllib
 
 
@@ -54,6 +55,7 @@ def load_config(path: str | Path | None) -> AppConfig:
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
     data = tomllib.loads(config_path.read_text(encoding="utf-8-sig"))
+    _apply_ai_env(data.get("ai", {}))
     interests_data = data.get("interests", {})
     reading_data = data.get("reading", {})
 
@@ -69,3 +71,20 @@ def load_config(path: str | Path | None) -> AppConfig:
             candidate_count=int(reading_data.get("candidate_count", DEFAULT_CONFIG.reading.candidate_count)),
         ),
     )
+
+
+def _apply_ai_env(ai_data: dict) -> None:
+    provider = str(ai_data.get("provider", os.environ.get("AI_PROVIDER", "iphy"))).strip().lower()
+    if provider and "AI_PROVIDER" not in os.environ:
+        os.environ["AI_PROVIDER"] = provider
+
+    prefix = provider.upper()
+    mapping = {
+        "api_key": f"{prefix}_API_KEY",
+        "model": f"{prefix}_MODEL",
+        "base_url": f"{prefix}_BASE_URL",
+    }
+    for config_key, env_key in mapping.items():
+        value = ai_data.get(config_key)
+        if value is not None and env_key not in os.environ:
+            os.environ[env_key] = str(value).strip()

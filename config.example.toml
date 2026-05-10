@@ -1,3 +1,11 @@
+[ai]
+provider = "deepseek"
+base_url = "https://api.deepseek.com"
+api_key = ""
+# Fill this with the model id exposed by the platform.
+# Leave empty to let the app fetch the first available model from /models.
+model = "deepseek-v4-flash"
+
 [interests]
 categories = ["quant-ph"]
 keywords = [

@@ -11,7 +11,6 @@ import urllib.request
 from .arxiv import Paper
 
 
-DEEPSEEK_CHAT_URL = "https://api.deepseek.com/chat/completions"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
 
@@ -32,27 +31,27 @@ class TriageResult:
 
 
 def summarize_paper(paper: Paper, source_text: str, *, explain_for: str) -> SummaryResult:
-    provider = os.environ.get("AI_PROVIDER", "deepseek").strip().lower()
+    provider = os.environ.get("AI_PROVIDER", "iphy").strip().lower()
     if provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
         if api_key:
             return SummaryResult(_openai_summary(api_key, model, paper, source_text, explain_for), True, "openai")
     else:
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
-        model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+        api_key = _chat_api_key(provider)
         if api_key:
-            return SummaryResult(_deepseek_summary(api_key, model, paper, source_text, explain_for), True, "deepseek")
+            model = _chat_model(provider, api_key)
+            return SummaryResult(_chat_summary(provider, api_key, model, paper, source_text, explain_for), True, provider)
     return SummaryResult(_local_summary(paper, source_text, explain_for), False, "local")
 
 
 def stream_summary_chunks(paper: Paper, source_text: str, *, explain_for: str) -> Iterator[tuple[str, str]]:
-    provider = os.environ.get("AI_PROVIDER", "deepseek").strip().lower()
-    if provider == "deepseek":
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
-        model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    provider = os.environ.get("AI_PROVIDER", "iphy").strip().lower()
+    if provider != "openai":
+        api_key = _chat_api_key(provider)
         if api_key:
-            yield from _deepseek_summary_stream(api_key, model, paper, source_text, explain_for)
+            model = _chat_model(provider, api_key)
+            yield from _chat_summary_stream(provider, api_key, model, paper, source_text, explain_for)
             return
 
     result = summarize_paper(paper, source_text, explain_for=explain_for)
@@ -60,17 +59,17 @@ def stream_summary_chunks(paper: Paper, source_text: str, *, explain_for: str) -
 
 
 def triage_paper(paper: Paper, *, interest_description: str) -> TriageResult:
-    provider = os.environ.get("AI_PROVIDER", "deepseek").strip().lower()
+    provider = os.environ.get("AI_PROVIDER", "iphy").strip().lower()
     if provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
         if api_key:
             return _openai_triage(api_key, model, paper, interest_description)
     else:
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
-        model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+        api_key = _chat_api_key(provider)
         if api_key:
-            return _deepseek_triage(api_key, model, paper, interest_description)
+            model = _chat_model(provider, api_key)
+            return _chat_triage(provider, api_key, model, paper, interest_description)
     return _local_triage(paper, interest_description)
 
 
@@ -83,7 +82,7 @@ def answer_question(
     *,
     explain_for: str,
 ) -> SummaryResult:
-    provider = os.environ.get("AI_PROVIDER", "deepseek").strip().lower()
+    provider = os.environ.get("AI_PROVIDER", "iphy").strip().lower()
     if provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
@@ -94,13 +93,13 @@ def answer_question(
                 "openai",
             )
     else:
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
-        model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+        api_key = _chat_api_key(provider)
         if api_key:
+            model = _chat_model(provider, api_key)
             return SummaryResult(
-                _deepseek_chat(api_key, model, paper, source_text, summary, history, question, explain_for),
+                _chat_completion_chat(provider, api_key, model, paper, source_text, summary, history, question, explain_for),
                 True,
-                "deepseek",
+                provider,
             )
     return SummaryResult(_local_answer(paper, question, summary), False, "local")
 
@@ -114,12 +113,12 @@ def stream_answer_chunks(
     *,
     explain_for: str,
 ) -> Iterator[tuple[str, str]]:
-    provider = os.environ.get("AI_PROVIDER", "deepseek").strip().lower()
-    if provider == "deepseek":
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
-        model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    provider = os.environ.get("AI_PROVIDER", "iphy").strip().lower()
+    if provider != "openai":
+        api_key = _chat_api_key(provider)
         if api_key:
-            yield from _deepseek_chat_stream(api_key, model, paper, source_text, summary, history, question, explain_for)
+            model = _chat_model(provider, api_key)
+            yield from _chat_completion_chat_stream(provider, api_key, model, paper, source_text, summary, history, question, explain_for)
             return
 
     result = answer_question(paper, source_text, summary, history, question, explain_for=explain_for)
@@ -224,7 +223,7 @@ TeX source excerpt:
     return messages
 
 
-def _deepseek_summary(api_key: str, model: str, paper: Paper, source_text: str, explain_for: str) -> str:
+def _chat_summary(provider: str, api_key: str, model: str, paper: Paper, source_text: str, explain_for: str) -> str:
     payload = {
         "model": model,
         "messages": [
@@ -234,11 +233,13 @@ def _deepseek_summary(api_key: str, model: str, paper: Paper, source_text: str, 
         "temperature": 0.2,
         "stream": False,
     }
-    data = _post_json(DEEPSEEK_CHAT_URL, payload, api_key, timeout=180)
+    data = _post_json(_chat_completions_url(provider), payload, api_key, timeout=180)
     return _extract_chat_text(data)
 
 
-def _deepseek_summary_stream(api_key: str, model: str, paper: Paper, source_text: str, explain_for: str) -> Iterator[tuple[str, str]]:
+def _chat_summary_stream(
+    provider: str, api_key: str, model: str, paper: Paper, source_text: str, explain_for: str
+) -> Iterator[tuple[str, str]]:
     payload = {
         "model": model,
         "messages": [
@@ -248,13 +249,13 @@ def _deepseek_summary_stream(api_key: str, model: str, paper: Paper, source_text
         "temperature": 0.2,
         "stream": True,
     }
-    for event in _post_json_stream(DEEPSEEK_CHAT_URL, payload, api_key, timeout=180):
+    for event in _post_json_stream(_chat_completions_url(provider), payload, api_key, timeout=180):
         chunk = _extract_stream_delta(event)
         if chunk:
-            yield "deepseek", chunk
+            yield provider, chunk
 
 
-def _deepseek_triage(api_key: str, model: str, paper: Paper, interest_description: str) -> TriageResult:
+def _chat_triage(provider: str, api_key: str, model: str, paper: Paper, interest_description: str) -> TriageResult:
     payload = {
         "model": model,
         "messages": [
@@ -264,11 +265,12 @@ def _deepseek_triage(api_key: str, model: str, paper: Paper, interest_descriptio
         "temperature": 0,
         "stream": False,
     }
-    data = _post_json(DEEPSEEK_CHAT_URL, payload, api_key, timeout=90)
-    return _parse_triage(_extract_chat_text(data), provider="deepseek")
+    data = _post_json(_chat_completions_url(provider), payload, api_key, timeout=90)
+    return _parse_triage(_extract_chat_text(data), provider=provider)
 
 
-def _deepseek_chat(
+def _chat_completion_chat(
+    provider: str,
     api_key: str,
     model: str,
     paper: Paper,
@@ -284,11 +286,12 @@ def _deepseek_chat(
         "temperature": 0.2,
         "stream": False,
     }
-    data = _post_json(DEEPSEEK_CHAT_URL, payload, api_key, timeout=180)
+    data = _post_json(_chat_completions_url(provider), payload, api_key, timeout=180)
     return _extract_chat_text(data)
 
 
-def _deepseek_chat_stream(
+def _chat_completion_chat_stream(
+    provider: str,
     api_key: str,
     model: str,
     paper: Paper,
@@ -304,10 +307,10 @@ def _deepseek_chat_stream(
         "temperature": 0.2,
         "stream": True,
     }
-    for event in _post_json_stream(DEEPSEEK_CHAT_URL, payload, api_key, timeout=180):
+    for event in _post_json_stream(_chat_completions_url(provider), payload, api_key, timeout=180):
         chunk = _extract_stream_delta(event)
         if chunk:
-            yield "deepseek", chunk
+            yield provider, chunk
 
 
 def _openai_summary(api_key: str, model: str, paper: Paper, source_text: str, explain_for: str) -> str:
@@ -340,6 +343,61 @@ def _openai_chat(
     }
     data = _post_json(OPENAI_RESPONSES_URL, payload, api_key, timeout=180)
     return _extract_response_text(data)
+
+
+def _chat_api_key(provider: str) -> str | None:
+    if provider == "iphy":
+        return os.environ.get("IPHY_API_KEY")
+    return os.environ.get(f"{provider.upper()}_API_KEY")
+
+
+def _chat_model(provider: str, api_key: str) -> str:
+    if provider == "iphy":
+        model = os.environ.get("IPHY_MODEL")
+        return model.strip() if model and model.strip() else _first_available_model(provider, api_key)
+    model = os.environ.get(f"{provider.upper()}_MODEL")
+    if model and model.strip():
+        return model.strip()
+    return _first_available_model(provider, api_key)
+
+
+def _chat_completions_url(provider: str) -> str:
+    base_url = _chat_base_url(provider)
+    return f"{base_url}/chat/completions"
+
+
+def _chat_models_url(provider: str) -> str:
+    base_url = _chat_base_url(provider)
+    return f"{base_url}/models"
+
+
+def _chat_base_url(provider: str) -> str:
+    base_url = os.environ.get(f"{provider.upper()}_BASE_URL", "").strip()
+    if not base_url:
+        raise RuntimeError(f"{provider} base URL is not configured; set [ai].base_url in config.toml")
+    return base_url.rstrip("/")
+
+
+def _first_available_model(provider: str, api_key: str) -> str:
+    data = _get_json(_chat_models_url(provider), api_key, timeout=30)
+    models = data.get("data", [])
+    for item in models:
+        model_id = item.get("id")
+        if isinstance(model_id, str) and model_id.strip():
+            return model_id.strip()
+    raise RuntimeError(f"{provider} models response did not contain any model id")
+
+
+def _get_json(url: str, api_key: str, *, timeout: int) -> dict:
+    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"}, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"AI API error {exc.code}: {body}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"AI network error: {exc.reason}") from exc
 
 
 def _post_json(url: str, payload: dict, api_key: str, *, timeout: int) -> dict:
@@ -445,7 +503,7 @@ def _local_triage(paper: Paper, interest_description: str) -> TriageResult:
     return TriageResult(
         keep=bool(matches),
         score=score,
-        reason="Local keyword fallback; set DEEPSEEK_API_KEY for semantic title/abstract triage.",
+        reason="Local keyword fallback; set IPHY_API_KEY for semantic title/abstract triage.",
         matched_interests=matches,
         provider="local",
     )
@@ -457,7 +515,7 @@ def _local_summary(paper: Paper, source_text: str, explain_for: str) -> str:
     likely_experiment = _first_matching(sections, ("experiment", "measurement", "result", "simulation", "implementation"))
     return "\n".join(
         [
-            "[Local fallback: DEEPSEEK_API_KEY is not set, so no AI model was called.]",
+            "[Local fallback: IPHY_API_KEY is not set, so no AI model was called.]",
             "",
             f"Title: {paper.title}",
             f"Authors: {', '.join(paper.authors[:8])}",
@@ -481,7 +539,7 @@ def _local_summary(paper: Paper, source_text: str, explain_for: str) -> str:
 def _local_answer(paper: Paper, question: str, summary: str) -> str:
     return "\n".join(
         [
-            "[Local fallback: DEEPSEEK_API_KEY is not set, so no AI model was called.]",
+            "[Local fallback: IPHY_API_KEY is not set, so no AI model was called.]",
             f"Paper: {paper.title}",
             f"Question: {question}",
             "",

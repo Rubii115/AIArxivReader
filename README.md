@@ -5,7 +5,7 @@
 Windows 用户可以直接使用两个批处理脚本：
 
 1. 双击 `install.bat`：创建虚拟环境、安装项目，并生成 `config.toml` 和 `.env`。
-2. 打开 `.env`，把 `DEEPSEEK_API_KEY` 改成你的真实 DeepSeek API Key。
+2. 打开 `config.toml` 或 `.env`，把 `IPHY_API_KEY` 改成你所里模型平台的真实 API Key。
 3. 双击 `start.bat`：自动激活虚拟环境、打开浏览器并启动 Web UI。
 
 默认地址是：
@@ -52,7 +52,7 @@ Copy-Item config.example.toml config.toml
 
 ### 3. 配置长期 API Key
 
-推荐用本地 `.env` 文件，这样以后重新打开终端不需要反复设置 `$env:DEEPSEEK_API_KEY`。
+推荐用 `config.toml` 的 `[ai]` 区块或本地 `.env` 文件，这样以后重新打开终端不需要反复设置 `$env:IPHY_API_KEY`。
 
 ```powershell
 Copy-Item .env.example .env
@@ -62,8 +62,10 @@ notepad .env
 把 `.env` 里的这一行改成你的真实 key：
 
 ```text
-DEEPSEEK_API_KEY=你的 DeepSeek API Key
-DEEPSEEK_MODEL=deepseek-v4-flash
+AI_PROVIDER=iphy
+IPHY_BASE_URL=https://chat.iphy.ac.cn/api/v1
+IPHY_API_KEY=你的所内平台 API Key
+# IPHY_MODEL 留空时会自动从 /models 获取第一个可用模型
 ```
 
 `.env` 已经写进 `.gitignore`，不会上传到 GitHub。以后只需要激活虚拟环境并启动服务，程序会自动读取 `.env`。
@@ -71,7 +73,7 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 也可以临时用环境变量覆盖 `.env`：
 
 ```powershell
-$env:DEEPSEEK_API_KEY="临时 key"
+$env:IPHY_API_KEY="临时 key"
 ```
 
 ### 4. 启动 Web UI
@@ -157,8 +159,10 @@ arxiv-reader find "Attention Is All You Need Vaswani 2017"
 请确认项目根目录有 `.env` 文件，并且内容类似：
 
 ```text
-DEEPSEEK_API_KEY=sk-...
-DEEPSEEK_MODEL=deepseek-v4-flash
+AI_PROVIDER=iphy
+IPHY_BASE_URL=https://chat.iphy.ac.cn/api/v1
+IPHY_API_KEY=sk-...
+# IPHY_MODEL=可选模型 ID
 ARXIV_USER_AGENT=AIArxivReader/0.1 (https://github.com/Rubii115/AIArxivReader; mailto:your_email@example.com)
 ```
 

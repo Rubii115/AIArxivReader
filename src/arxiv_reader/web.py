@@ -57,9 +57,10 @@ def make_handler(state: AppState):
                         "explain_for": state.config.interests.explain_for,
                         "default_limit": state.config.reading.max_papers_per_run,
                         "default_candidates": state.config.reading.candidate_count,
-                        "ai_provider": os.environ.get("AI_PROVIDER", "deepseek"),
-                        "deepseek_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
-                        "deepseek_key_present": bool(os.environ.get("DEEPSEEK_API_KEY")),
+                        "ai_provider": _ai_provider(),
+                        "ai_model": _ai_env("MODEL") or "auto",
+                        "ai_key_present": bool(_ai_env("API_KEY")),
+                        "ai_base_url": _ai_env("BASE_URL"),
                         "openai_key_present": bool(os.environ.get("OPENAI_API_KEY")),
                     }
                 )
@@ -446,6 +447,14 @@ def _paper_json(paper: Paper) -> dict:
 
 def _load_index_html() -> str:
     return FRONTEND_INDEX.read_text(encoding="utf-8")
+
+
+def _ai_provider() -> str:
+    return os.environ.get("AI_PROVIDER", "iphy").strip().lower()
+
+
+def _ai_env(name: str) -> str:
+    return os.environ.get(f"{_ai_provider().upper()}_{name}", "")
 
 
 def main(argv: list[str] | None = None) -> int:

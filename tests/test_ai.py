@@ -1,4 +1,6 @@
-from arxiv_reader.ai import _extract_stream_delta, _parse_triage, stream_summary_chunks
+import pytest
+
+from arxiv_reader.ai import _chat_base_url, _extract_stream_delta, _parse_triage, stream_summary_chunks
 from arxiv_reader.arxiv import Paper
 
 
@@ -7,12 +9,12 @@ def test_parse_triage_json_from_model_text():
         """
         {"keep": true, "score": 86, "reason": "matches quantum error correction", "matched_interests": ["QEC"]}
         """,
-        provider="deepseek",
+        provider="iphy",
     )
     assert result.keep is True
     assert result.score == 86
     assert result.matched_interests == ("QEC",)
-    assert result.provider == "deepseek"
+    assert result.provider == "iphy"
 
 
 def test_parse_triage_clamps_score():
@@ -23,15 +25,23 @@ def test_parse_triage_clamps_score():
     assert result.score == 100
 
 
-def test_extract_stream_delta_reads_deepseek_chunk():
+def test_extract_stream_delta_reads_chat_completion_chunk():
     assert (
         _extract_stream_delta({"choices": [{"delta": {"content": "hello"}}]})
         == "hello"
     )
 
 
+def test_chat_base_url_must_be_configured(monkeypatch):
+    monkeypatch.delenv("IPHY_BASE_URL", raising=False)
+
+    with pytest.raises(RuntimeError, match="base URL is not configured"):
+        _chat_base_url("iphy")
+
+
 def test_stream_summary_chunks_falls_back_without_key(monkeypatch):
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("AI_PROVIDER", "iphy")
+    monkeypatch.delenv("IPHY_API_KEY", raising=False)
     paper = Paper(
         arxiv_id="2605.04049",
         title="Demo",

@@ -579,7 +579,7 @@
       document.querySelector("#candidateCount").value = cfg.default_candidates || 120;
       document.querySelector("#configHint").innerHTML =
         `<strong>检索分类</strong>：${escapeHtml(cfg.categories.join(", "))}<br>` +
-        `<strong>AI</strong>：${escapeHtml(cfg.ai_provider)} / ${escapeHtml(cfg.deepseek_model)} / key ${cfg.deepseek_key_present ? "已读取" : "未读取"}<br>` +
+        `<strong>AI</strong>：${escapeHtml(cfg.ai_provider)} / ${escapeHtml(cfg.ai_model)} / key ${cfg.ai_key_present ? "已读取" : "未读取"}<br>` +
         `<strong>说明</strong>：候选抓取上限是防止极端日期一次抓太多；若 arXiv 当天总数超过上限，进度区会提示你调高。`;
     }
 
